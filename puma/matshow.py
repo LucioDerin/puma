@@ -242,23 +242,39 @@ class MatrixComparison(MatshowPlot):
     two triangles, each containing the value of the corresponding matrix.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self, show_legend: bool = True, matrix_names: list[str] | None = None, **kwargs
+    ):
         """Initialize the MatrixComparison plotter."""
+        self.show_legend = show_legend
+        self.matrix_names = matrix_names
+        if matrix_names is None:
+            self.matrix_names = ["m1", "m2"]
         super().__init__(**kwargs)
 
     def __plot(self, m1, m2):
         """Plot the two matrices."""
         n_rows, n_cols = m1.shape
-        # Colormap and normalization
         all_values = np.concatenate([m1.flatten(), m2.flatten()])
         norm = plt.Normalize(vmin=np.min(all_values), vmax=np.max(all_values))
-        cmap = self.colormap  # Cambialo se vuoi
+        cmap = self.colormap
 
+        # Set up divider for colorbar and legend
+        divider = make_axes_locatable(self.axis_top)
+
+        # Prepare optional axes: colorbar and legend axes
+        cax = None
+        legend_ax = None
+        if self.show_cbar:
+            cax = divider.append_axes("right", size="5%", pad=0.1)
+        if self.show_legend:
+            legend_ax = divider.append_axes("right", size="20%", pad=0.6)
+            legend_ax.set_box_aspect(1)
+
+        # Matrix plotting: Plotting triangles for m1 and m2
         ax = self.axis_top
-
         for y in range(n_rows):
             for x in range(n_cols):
-                # Corners coordinates
                 top_left = (x, y + 1)
                 top_right = (x + 1, y + 1)
                 bottom_left = (x, y)
@@ -276,129 +292,145 @@ class MatrixComparison(MatshowPlot):
                 patch2 = patches.Polygon(tri2, facecolor=color2, edgecolor="gray")
                 ax.add_patch(patch2)
 
-                # Values
                 if self.show_entries:
-
-                    # Plotting text1
+                    # Text for m1 (upper triangle)
                     luminance1 = self._MatshowPlot__get_luminance(color1)
-                    color1 = (
+                    text_color1 = (
                         "white" if luminance1 <= self.text_color_threshold else "black"
                     )
-                    # If matrix entry is an int, do not show decimals
-                    if m.modf(m1[y, x])[0] == 0:
-                        text1 = f"{m1[y, x]:.0f}"
-                    # Else, round it or show it as percentage
-                    else:
-                        text1 = (
+                    text1 = (
+                        f"{m1[y, x]:.0f}"
+                        if m.modf(m1[y, x])[0] == 0
+                        else (
                             f"{m1[y, x]:.3f}"
                             if not self.show_percentage
                             else f"{m1[y, x] * 100:.0f}%"
                         )
+                    )
                     ax.text(
-                        x=x + 0.75,
-                        y=y + 0.75,
-                        s=text1,
-                        va="center",
+                        x + 0.75,
+                        y + 0.75,
+                        text1,
                         ha="center",
-                        c=color1,
+                        va="center",
                         fontsize=self.fontsize,
+                        color=text_color1,
                     )
 
-                    # Plotting text2
+                    # Text for m2 (lower triangle)
                     luminance2 = self._MatshowPlot__get_luminance(color2)
-                    color2 = (
+                    text_color2 = (
                         "white" if luminance2 <= self.text_color_threshold else "black"
                     )
-                    # If matrix entry is an int, do not show decimals
-                    if m.modf(m2[y, x])[0] == 0:
-                        text2 = f"{m2[y, x]:.0f}"
-                    # Else, round it or show it as percentage
-                    else:
-                        text2 = (
+                    text2 = (
+                        f"{m2[y, x]:.0f}"
+                        if m.modf(m2[y, x])[0] == 0
+                        else (
                             f"{m2[y, x]:.3f}"
                             if not self.show_percentage
                             else f"{m2[y, x] * 100:.0f}%"
                         )
+                    )
                     ax.text(
-                        x=x + 0.25,
-                        y=y + 0.25,
-                        s=text2,
-                        va="center",
+                        x + 0.25,
+                        y + 0.25,
+                        text2,
                         ha="center",
-                        c=color2,
+                        va="center",
                         fontsize=self.fontsize,
+                        color=text_color2,
                     )
 
-        # Axes settings
+        # Configure axis settings (no ticks)
         ax.set_xlim(0, n_cols)
         ax.set_ylim(0, n_rows)
-
         ax.set_aspect("equal")
 
+        # Add colorbar if enabled
         if self.show_cbar:
-            # Plotting colorbar
-            divider = make_axes_locatable(ax)
-            cax = divider.append_axes("right", size="5%", pad=0.1)
             sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
             sm.set_array([])
             cbar = plt.colorbar(sm, cax=cax)
 
-            # If using percentages, converting cbar labels to percentages
             if self.show_entries and self.show_percentage:
-                minMat = np.min(all_values)
-                maxMat = np.max(all_values)
-                cbar.set_ticks(
-                    ticks=np.linspace(minMat, maxMat, 5),
-                    labels=[
-                        f"{i}%"
-                        for i in np.round(np.linspace(minMat, maxMat, 5) * 100, 2)
-                    ],
-                    fontsize=self.fontsize,
-                )
-            if self.cbar_label is not None:
+                minMat, maxMat = np.min(all_values), np.max(all_values)
+                ticks = np.linspace(minMat, maxMat, 5)
+                cbar.set_ticks(ticks)
+                cbar.set_ticklabels([f"{t * 100:.0f}%" for t in ticks])
+                cbar.ax.tick_params(labelsize=self.fontsize)
+
+            if self.cbar_label:
                 cbar.ax.set_ylabel(self.cbar_label, fontsize=self.fontsize)
 
-        # Setting tick labels
+        # Add triangle legend if enabled
+        if self.show_legend:
+            legend_ax.axis("off")
+
+            triangle1 = patches.Polygon(
+                [[0, 0], [1, 0], [0, 1]],
+                facecolor=cmap(norm(np.min(all_values))),
+                edgecolor="gray",
+            )
+            triangle2 = patches.Polygon(
+                [[1, 1], [1, 0], [0, 1]],
+                facecolor=cmap(norm(np.min(all_values))),
+                edgecolor="gray",
+            )
+            square = patches.Rectangle(
+                (0, 0), 1, 1, facecolor="none", edgecolor="black"
+            )
+
+            legend_ax.add_patch(square)
+            legend_ax.add_patch(triangle1)
+            legend_ax.add_patch(triangle2)
+
+            legend_ax.text(
+                0.75,
+                0.75,
+                self.matrix_names[0],
+                ha="center",
+                va="center",
+                fontsize=self.fontsize,
+            )
+            legend_ax.text(
+                0.25,
+                0.25,
+                self.matrix_names[1],
+                ha="center",
+                va="center",
+                fontsize=self.fontsize,
+            )
+
+        # Set tick labels
         if self.x_ticklabels is None:
             self.x_ticklabels = [str(i) for i in range(n_cols)]
-            logger.info("MatshowPlot: no x_ticklabels given, using indices instead.")
         if self.y_ticklabels is None:
             self.y_ticklabels = [str(i) for i in range(n_rows)]
-            logger.info("MatshowPlot: no y_ticklabels given, using indices instead.")
 
-        # Writing class names on the axes
-        positions = np.array(range(n_cols)) + 0.75
-        self.axis_top.set_xticks(
-            positions,
-            labels=self.x_ticklabels,
+        x_pos = np.arange(n_cols) + 0.75
+        y_pos = np.arange(n_rows) + 0.5
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(
+            self.x_ticklabels,
             rotation=self.x_ticks_rotation,
             fontsize=self.fontsize,
             ha="right",
         )
-        positions = np.array(range(n_rows)) + 0.5
-        self.axis_top.set_yticks(
-            positions, labels=self.y_ticklabels, fontsize=self.fontsize
-        )
-        # Put xticks to the bottom
-        self.axis_top.xaxis.tick_bottom()
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(self.y_ticklabels, fontsize=self.fontsize)
+        ax.xaxis.tick_bottom()
 
-        # Finished plotting, can apply atlas_style
+        self.set_xlabel()
+        self.set_ylabel(ax)
+        self.set_title()
+
         self.plotting_done = True
-        # Applying atlas style
         if self.apply_atlas_style:
-            # Apply ATLAS style
             self.atlasify()
 
-        # Disable x and y ticks for better appearance
-        self.axis_top.tick_params("x", which="both", top=False, bottom=False)
-        self.axis_top.tick_params("y", which="both", right=False, left=False)
-        # Disable grid for better appearance
+        # disable ticks and grid which are enabled by atlasify
+        self.axis_top.tick_params(axis="both", which="both", length=0)
         self.axis_top.grid(False)
-
-        # Setting title and label
-        self.set_xlabel()
-        self.set_ylabel(self.axis_top)
-        self.set_title()
 
     def draw(self, matrix1, matrix2):
         """Draw a comparison between two matrices with the class customized appearance.
