@@ -106,8 +106,12 @@ class MatshowPlot(PlotBase):
         """Plot the Matrix."""
         n_cols = matrix.shape[1]
         n_rows = matrix.shape[0]
-
-        im = self.axis_top.matshow(matrix, cmap=self.colormap)
+        
+        # If using percentage values, make the colormap in range [0,1]
+        if self.show_percentage:
+            im = self.axis_top.matshow(matrix, vmin = 0, vmax = 1, cmap=self.colormap)
+        else:    
+            im = self.axis_top.matshow(matrix, cmap=self.colormap)
 
         # If mat entries have to be plotted
         if self.show_entries:
@@ -256,7 +260,12 @@ class MatrixComparison(MatshowPlot):
         """Plot the two matrices."""
         n_rows, n_cols = m1.shape
         all_values = np.concatenate([m1.flatten(), m2.flatten()])
-        norm = plt.Normalize(vmin=np.min(all_values), vmax=np.max(all_values))
+        
+        # If using percentage values, make the colormap in range [0,1]
+        if self.show_percentage:
+            norm = plt.Normalize(vmin=0, vmax=1)
+        else:
+            norm = plt.Normalize(vmin=np.min(all_values), vmax=np.max(all_values))
         cmap = self.colormap
 
         # Set up divider for colorbar and legend
