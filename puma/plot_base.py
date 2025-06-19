@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+import json
 import tkinter as tk
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 import atlasify
+import numpy as np
+import yaml
+from ftag import Flavours, Label
 from IPython import get_ipython
 from IPython.display import display
 from matplotlib import axis, gridspec, lines
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
+from matplotlib.ticker import MaxNLocator
 
 from puma.utils import logger, set_xaxis_ticklabels_invisible
 
@@ -58,6 +65,153 @@ class PlotLineObject:
     markersize: int = None
     markeredgewidth: int = None
     is_marker: bool = None
+
+    @property
+    def args_to_store(self) -> dict[str, Any]:
+        """Returns the arguments that need to be stored/loaded.
+
+        Returns
+        -------
+        dict[str, Any]
+            Dict with the arguments
+        """
+        # Create the dict with the args to store/load
+        return {
+            "xmin": self.xmin,
+            "xmax": self.xmax,
+            "colour": self.colour,
+            "label": self.label,
+            "linestyle": self.linestyle,
+            "linewidth": self.linewidth,
+            "alpha": self.alpha,
+            "marker": self.marker,
+            "markersize": self.markersize,
+            "markeredgewidth": self.markeredgewidth,
+            "is_marker": self.is_marker,
+        }
+
+    @staticmethod
+    def encode(obj):
+        """Return a JSON/YAML-safe version of obj, tagging special types."""
+        # Encode special cases which can't be easily stored in json and yaml
+        if isinstance(obj, np.ndarray):
+            return {"__ndarray__": obj.tolist(), "dtype": str(obj.dtype)}
+        if isinstance(obj, Label):
+            return {"__label__": obj.name}
+        if isinstance(obj, tuple):
+            return {"__tuple__": [PlotLineObject.encode(v) for v in obj]}
+
+        # For lists and dicts, walk through them and ensure correct encoding for sub-objects
+        if isinstance(obj, list):
+            return [PlotLineObject.encode(v) for v in obj]
+        if isinstance(obj, dict):
+            return {k: PlotLineObject.encode(v) for k, v in obj.items()}
+
+        # If no encoding is needed, return the object
+        return obj
+
+    @staticmethod
+    def decode(obj):
+        """Inverse of encode, turning tags back into real objects."""
+        # If a dict was used, go through and check for types
+        if isinstance(obj, dict):
+            if "__ndarray__" in obj:
+                return np.asarray(obj["__ndarray__"], dtype=obj["dtype"])
+            if "__label__" in obj:
+                return Flavours[obj["__label__"]]
+            if "__tuple__" in obj:
+                return tuple(PlotLineObject.decode(v) for v in obj["__tuple__"])
+
+            # If it's a regular dict, walk down the keys
+            return {k: PlotLineObject.decode(v) for k, v in obj.items()}
+
+        # If a list was used, check that all sub-objects are correctly loaded
+        if isinstance(obj, list):
+            return [PlotLineObject.decode(v) for v in obj]
+
+        # If no decoding is needed, return the object
+        return obj
+
+    def save(self, path: str | Path) -> None:
+        """Store class attributes in a file.
+
+        Saving can be performed to a yaml and a json file.
+
+        Parameters
+        ----------
+        path : str | Path
+            Path to which the class object attributes are written.
+        """
+        # Ensure path is a path object
+        path = Path(path)
+
+        # Get the attributes as a dict
+        data = self.encode(self.args_to_store)
+
+        # Check for json and store it as such
+        if path.suffix == ".json":
+            with path.open("w") as f:
+                json.dump(data, f, indent=2)
+
+        # Check for yaml and store it as such
+        elif path.suffix in {".yaml", ".yml"}:
+            with path.open("w") as f:
+                yaml.safe_dump(data, f)
+
+        # Else ValueError
+        else:
+            raise ValueError("Unknown file extension. Use '.json', '.yaml' or '.yml'!")
+
+    @classmethod
+    def load(cls, path: str | Path, **extra_kwargs) -> object:
+        """Load the needed attributes for the class from file and init.
+
+        Parameters
+        ----------
+        path : str | Path
+            Path in which the attributes are stored.
+
+        Returns
+        -------
+        Class Instance
+            Instance of class with the given attributes.
+
+        Raises
+        ------
+        ValueError
+            If the given file is neither json nor a yaml file.
+        """
+        # Ensure path is a path object
+        path = Path(path)
+
+        # Check if json and load it as such
+        if path.suffix == ".json":
+            with path.open() as f:
+                data = json.load(f)
+
+        # Check if yaml and load it as such
+        elif path.suffix in {".yaml", ".yml"}:
+            with path.open() as f:
+                data = yaml.safe_load(f)
+
+        # Else ValueError
+        else:
+            raise ValueError("Unknown file extension. Use '.json', '.yaml' or '.yml'.")
+
+        # Convert back to numpy where appropriate
+        data = cls.decode(data)
+
+        # allow caller to override
+        data.update(extra_kwargs)
+
+        # Init the class without running __init__
+        obj = cls.__new__(cls)
+
+        # Set attributes verbatim
+        for key, val in data.items():
+            setattr(obj, key, val)
+
+        return obj
 
 
 @dataclass
@@ -112,6 +266,8 @@ class PlotObject:
         Specify if the background of the plot should be transparent, by default False
     grid : bool, optional
         Set the grid for the plots.
+    figure_layout : str, optional
+        Set the layout that is used for the plot. By default "constrained"
     leg_fontsize : int, optional
         Fontsize of the legend, by default 10
     leg_loc : str, optional
@@ -175,6 +331,7 @@ class PlotObject:
     transparent: bool = False
 
     grid: bool = True
+    figure_layout: str = "constrained"
 
     # legend settings
     leg_fontsize: int = None
@@ -323,7 +480,7 @@ class PlotBase(PlotObject):
             ratio_height = 1.0
             height = top_height + self.n_ratio_panels * ratio_height
             figsize = (width, height) if self.figsize is None else self.figsize
-            self.fig = Figure(figsize=figsize, constrained_layout=True)
+            self.fig = Figure(figsize=figsize, layout=self.figure_layout)
 
             if self.n_ratio_panels == 0:
                 self.axis_top = self.fig.gca()
@@ -339,6 +496,23 @@ class PlotBase(PlotObject):
                     if i < self.n_ratio_panels:
                         set_xaxis_ticklabels_invisible(sub_axis)
                     self.ratio_axes.append(sub_axis)
+
+        # Add the locator to all axes
+        self.axis_top.yaxis.set_major_locator(
+            locator=MaxNLocator(
+                nbins="auto",
+                prune="both",
+                steps=[1, 2, 5, 10],
+            )
+        )
+        for ratio_axis in self.ratio_axes:
+            ratio_axis.yaxis.set_major_locator(
+                locator=MaxNLocator(
+                    nbins="auto",
+                    prune="both",
+                    steps=[1, 2, 5, 10],
+                )
+            )
 
         if self.grid:
             self.axis_top.grid(lw=0.3)
