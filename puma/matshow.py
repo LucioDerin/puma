@@ -134,7 +134,7 @@ class MatshowPlot(PlotBase):
                     )
 
                     # If matrix entry is an int, do not show decimals
-                    if m.modf(matrix[i, j])[0] == 0:
+                    if not self.show_percentage and m.modf(matrix[i, j])[0] == 0:
                         text = f"{matrix[i, j]:.0f}"
                     # Else, round it or show it as percentage
                     else:
@@ -167,10 +167,10 @@ class MatshowPlot(PlotBase):
                 minMat = np.min(matrix)
                 maxMat = np.max(matrix)
                 cbar.set_ticks(
-                    ticks=np.linspace(minMat, maxMat, 5),
+                    ticks=np.linspace(0, 100, 5),
                     labels=[
                         f"{i}%"
-                        for i in np.round(np.linspace(minMat, maxMat, 5) * 100, 2)
+                        for i in np.round(np.linspace(0, 100, 5), 2)
                     ],
                     fontsize=self.fontsize,
                 )
@@ -309,7 +309,7 @@ class MatrixComparison(MatshowPlot):
                     )
                     text1 = (
                         f"{m1[y, x]:.0f}"
-                        if m.modf(m1[y, x])[0] == 0
+                        if not self.show_percentage and m.modf(m1[y, x])[0] == 0
                         else (
                             f"{m1[y, x]:.3f}"
                             if not self.show_percentage
@@ -333,7 +333,7 @@ class MatrixComparison(MatshowPlot):
                     )
                     text2 = (
                         f"{m2[y, x]:.0f}"
-                        if m.modf(m2[y, x])[0] == 0
+                        if not self.show_percentage and m.modf(m2[y, x])[0] == 0
                         else (
                             f"{m2[y, x]:.3f}"
                             if not self.show_percentage
@@ -360,10 +360,9 @@ class MatrixComparison(MatshowPlot):
             sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
             sm.set_array([])
             cbar = plt.colorbar(sm, cax=cax)
-
+            # If using percentages, convert cbar labels to percentages
             if self.show_entries and self.show_percentage:
-                minMat, maxMat = np.min(all_values), np.max(all_values)
-                ticks = np.linspace(minMat, maxMat, 5)
+                ticks = np.linspace(0, 1, 5)
                 cbar.set_ticks(ticks)
                 cbar.set_ticklabels([f"{t * 100:.0f}%" for t in ticks])
                 cbar.ax.tick_params(labelsize=self.fontsize)
