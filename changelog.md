@@ -3,6 +3,27 @@
 ### [Latest]
 
 
+### [v0.4.8] (2025/06/19)
+
+- Bumping atlas-ftag-tools version to v0.2.13 [!329](https://github.com/umami-hep/puma/pull/329)
+- Puma Tutorial Fixes [!328](https://github.com/umami-hep/puma/pull/328)
+- Update Puma Tutorial to newest Standards [!327](https://github.com/umami-hep/puma/pull/327)
+
+### [v0.4.7] (2025/06/17)
+
+- Update atlas-ftag-tools package [!326](https://github.com/umami-hep/puma/pull/326)
+- Adding save/load functionality to VarVsVar and VarVsEff [!324](https://github.com/umami-hep/puma/pull/324)
+- Enable docker build for latest only on main [!325](https://github.com/umami-hep/puma/pull/325)
+- Adding option to define the plot layout [!323](https://github.com/umami-hep/puma/pull/323)
+- Enable Storage of Histogram Objects [!319](https://github.com/umami-hep/puma/pull/319)
+- Update atlas-ftag-tools package to v0.2.11 [!321](https://github.com/umami-hep/puma/pull/321)
+
+### [v0.4.6] (2025/05/23)
+
+- Minor updates and fixes to results class [!316](https://github.com/umami-hep/puma/pull/316)
+- Minor changes to make aux plotting style consistent with GN2 paper [!313](https://github.com/umami-hep/puma/pull/313)
+- Adding support for ratio_group for VarVsVar plots [!311](https://github.com/umami-hep/puma/pull/311)
+- Fix unintended gap between the last and second-last ratio plots [!312](https://github.com/umami-hep/puma/pull/312)
 
 ### [v0.4.5] (2025/04/09)
 

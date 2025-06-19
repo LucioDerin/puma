@@ -12,7 +12,7 @@ from ftag.hdf5 import H5Reader
 from puma import Histogram, HistogramPlot
 from puma.hlplots.tagger import Tagger
 from puma.matshow import MatshowPlot
-from puma.utils import logger
+from puma.utils import get_good_linestyles, logger
 from puma.utils.aux import get_aux_labels, get_trackOrigin_classNames
 from puma.utils.confusion_matrix import confusion_matrix
 from puma.utils.mass import calculate_vertex_mass
@@ -46,6 +46,8 @@ class AuxResults:
             self.perf_vars = [self.perf_vars]
         if self.atlas_second_tag is not None and self.atlas_third_tag is not None:
             self.atlas_second_tag = f"{self.atlas_second_tag}\n{self.atlas_third_tag}"
+        elif self.atlas_second_tag is None and self.atlas_third_tag is None:
+            self.atlas_second_tag = ""
 
         self.plot_funcs = {
             "vertexing": self.plot_var_vtx_perf,
@@ -247,6 +249,9 @@ class AuxResults:
         vertex_match_requirement: dict | None = None,
         **kwargs,
     ):
+        # Get good linestyles for plotting
+        line_styles = get_good_linestyles()
+
         if vtx_flavours is None and no_vtx_flavours is None:
             raise ValueError(
                 "Need to specify either vtx_flavours or no_vtx_flavours (or both) to make plots."
@@ -336,7 +341,7 @@ class AuxResults:
                 y_scale=1.4,
             )
 
-            for tagger in self.taggers.values():
+            for counter, tagger in enumerate(self.taggers.values()):
                 if tagger.label not in vtx_metrics:
                     continue
                 is_flavour = tagger.is_flav(flav)
@@ -349,6 +354,7 @@ class AuxResults:
                     n_reco=vtx_metrics[tagger.label]["n_test"][is_flavour],
                     label=tagger.label,
                     colour=tagger.colour,
+                    linestyle=line_styles[counter],
                     **kwargs,
                 )
                 vtx_trk_perf = VarVsVtx(
@@ -370,6 +376,7 @@ class AuxResults:
                     ),
                     label=tagger.label,
                     colour=tagger.colour,
+                    linestyle=line_styles[counter],
                     **kwargs,
                 )
 
@@ -407,7 +414,7 @@ class AuxResults:
                 y_scale=1.4,
             )
 
-            for tagger in self.taggers.values():
+            for counter, tagger in enumerate(self.taggers.values()):
                 if tagger.label not in vtx_metrics:
                     continue
                 is_flavour = tagger.is_flav(flav)
@@ -419,6 +426,7 @@ class AuxResults:
                     n_reco=vtx_metrics[tagger.label]["n_test"][is_flavour],
                     label=tagger.label,
                     colour=tagger.colour,
+                    linestyle=line_styles[counter],
                     **kwargs,
                 )
 
@@ -454,36 +462,64 @@ class AuxResults:
             vertexing_text = "Exclusive"
             suffix = "excl"
 
-        atlas_second_tag = "" if self.atlas_second_tag is None else self.atlas_second_tag
+        # Init a default kwargs dict for the HistogramPlot
+        histo_plot_kwargs = {
+            "ylabel": "Normalised number of vertices",
+            "atlas_first_tag": self.atlas_first_tag,
+            "atlas_second_tag": self.atlas_second_tag + f"\n{vertexing_text} vertexing",
+            "y_scale": 1.7,
+            "n_ratio_panels": 1,
+            "ymin_ratio": [0.8],
+            "ymax_ratio": [1.4],
+        }
+
+        # If kwargs are given, update the histo_plot_kwargs dict
+        if kwargs is not None:
+            histo_plot_kwargs.update(kwargs)
+
+        # Remove the kwargs that need to go to the Histogram objects
+        histo_kwargs = {"bins": 40, "bins_range": mass_range}
+        for iter_kwarg in list(histo_plot_kwargs):
+            if iter_kwarg in {
+                "bins",
+                "bins_range",
+                "bin_edges",
+                "norm",
+                "underoverflow",
+                "discrete_vals",
+            }:
+                histo_kwargs[iter_kwarg] = histo_plot_kwargs.pop(iter_kwarg)
 
         for flavour in vtx_flavours:
             if isinstance(flavour, str):
                 flav = Flavours[flavour]
 
             mass_plot = HistogramPlot(
-                bins_range=mass_range,
                 xlabel="$m_{SV}$ [GeV]",
-                ylabel="Normalised number of vertices",
-                atlas_first_tag=self.atlas_first_tag,
-                atlas_second_tag=atlas_second_tag
-                + f"\n{vertexing_text} vertexing, {flav.label.lower()}",
-                y_scale=1.7,
-                n_ratio_panels=1,
-                ymin_ratio=[0.8],
-                ymax_ratio=[1.4],
-                **kwargs,
+                atlas_second_tag=histo_plot_kwargs["atlas_second_tag"] + f", {flav.label.lower()}",
+                **{
+                    key: value
+                    for key, value in histo_plot_kwargs.items()
+                    if key not in ("atlas_second_tag")
+                },
             )
 
             if incl_vertexing:
                 mass_diff_plot = HistogramPlot(
-                    bins=np.linspace(-mass_range[1] / 2, mass_range[1] / 2, 12),
                     xlabel=r"$\Delta m_{SV}$ [GeV] (reco - truth)",
-                    ylabel="Normalised number of vertices",
-                    atlas_first_tag=self.atlas_first_tag,
-                    atlas_second_tag=atlas_second_tag
-                    + f"\n{vertexing_text} vertexing, {flav.label.lower()}",
-                    y_scale=1.4,
-                    **kwargs,
+                    atlas_second_tag=histo_plot_kwargs["atlas_second_tag"]
+                    + f", {flav.label.lower()}",
+                    **{
+                        key: value
+                        for key, value in histo_plot_kwargs.items()
+                        if key
+                        not in {
+                            "atlas_second_tag",
+                            "n_ratio_panels",
+                            "ymin_ratio",
+                            "ymax_ratio",
+                        }
+                    },
                 )
 
             for i, tagger in enumerate(self.taggers.values()):
@@ -518,9 +554,10 @@ class AuxResults:
 
                     mass_plot.add(
                         Histogram(
-                            truth_masses[truth_masses > 0.14],
+                            values=truth_masses[truth_masses > 0.14],
                             label="MC truth",
                             colour="#000000",
+                            **histo_kwargs,
                         ),
                         reference=True,
                     )
@@ -538,13 +575,30 @@ class AuxResults:
                     mass_diffs = sv_masses - truth_masses
                     mass_diffs = mass_diffs[np.logical_and(truth_masses > 0.14, sv_masses > 0.14)]
                     mass_diff_plot.add(
-                        Histogram(mass_diffs, label=tagger.label, colour=tagger.colour)
+                        Histogram(
+                            values=mass_diffs,
+                            bins=np.linspace(-mass_range[1] / 2, mass_range[1] / 2, 12),
+                            label=tagger.label,
+                            colour=tagger.colour,
+                            **{
+                                key: value
+                                for key, value in histo_kwargs.items()
+                                if key not in {"bins", "bins_range"}
+                            },
+                        )
                     )
                 else:
                     sv_masses = np.concatenate([np.unique(imass) for imass in masses])
 
                 sv_masses = sv_masses[sv_masses > 0.14]  # remove single and zero track vertices
-                mass_plot.add(Histogram(sv_masses, label=tagger.label, colour=tagger.colour))
+                mass_plot.add(
+                    Histogram(
+                        values=sv_masses,
+                        label=tagger.label,
+                        colour=tagger.colour,
+                        **histo_kwargs,
+                    )
+                )
 
             mass_plot.draw()
             mass_plot.savefig(self.get_filename(f"{flav}_sv_mass_{suffix}"))
